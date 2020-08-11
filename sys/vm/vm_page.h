@@ -70,6 +70,8 @@
 #define	_VM_PAGE_
 
 #include <vm/pmap.h>
+#include <sys/bitset.h>
+#include <sys/_bitset.h>
 
 /*
  *	Management of resident (logical) pages.
@@ -584,6 +586,26 @@ malloc2vm_flags(int malloc_flags)
 #define	PS_ALL_DIRTY	0x1
 #define	PS_ALL_VALID	0x2
 #define	PS_NONE_BUSY	0x4
+
+extern struct bitset *vm_page_dump;
+extern long vm_page_dump_pages;
+
+static inline void
+dump_add_page(vm_paddr_t pa)
+{
+	BIT_SET_ATOMIC(vm_page_dump_pages, pa >> PAGE_SHIFT, vm_page_dump);
+}
+
+static inline void
+dump_drop_page(vm_paddr_t pa)
+{
+	BIT_CLR_ATOMIC(vm_page_dump_pages, pa >> PAGE_SHIFT, vm_page_dump);
+}
+
+#define VM_PAGE_DUMP_FOREACH(bit, pa)					\
+	for ((bit) = BIT_FFS(vm_page_dump_pages, vm_page_dump);		\
+	    pa = ((bit) - 1) * PAGE_SIZE, (bit) != 0;			\
+	    (bit) = BIT_FFS_AT(vm_page_dump_pages, vm_page_dump, bit))	\
 
 bool vm_page_busy_acquire(vm_page_t m, int allocflags);
 void vm_page_busy_downgrade(vm_page_t m);
