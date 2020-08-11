@@ -72,6 +72,11 @@ __FBSDID("$FreeBSD$");
 _Static_assert(sizeof(long) * NBBY >= VM_PHYSSEG_MAX,
     "Too many physsegs.");
 
+#if VM_NRESERVLEVEL > 0
+#define	VM_LEVEL_0_SHIFT	(VM_LEVEL_0_ORDER + PAGE_SHIFT)
+#define	VM_LEVEL_0_SIZE		(1 << VM_LEVEL_0_SHIFT)
+#endif
+
 #ifdef NUMA
 struct mem_affinity __read_mostly *mem_affinity;
 int __read_mostly *mem_locality;
@@ -489,6 +494,10 @@ vm_phys_init(void)
 {
 	struct vm_freelist *fl;
 	struct vm_phys_seg *end_seg, *prev_seg, *seg, *tmp_seg;
+#if VM_NRESERVLEVEL > 0
+	vm_pindex_t l0_start, l0_end, l0_end_prev;
+	u_long nl0;
+#endif
 	u_long npages;
 	int dom, flind, freelist, oind, pind, segind;
 
@@ -544,6 +553,10 @@ vm_phys_init(void)
 #ifdef VM_PHYSSEG_SPARSE
 	npages = 0;
 #endif
+#if VM_NRESERVLEVEL > 0
+	nl0 = 0;
+	l0_end_prev = 0;
+#endif
 	for (segind = 0; segind < vm_phys_nsegs; segind++) {
 		seg = &vm_phys_segs[segind];
 #ifdef VM_PHYSSEG_SPARSE
@@ -551,6 +564,17 @@ vm_phys_init(void)
 		npages += atop(seg->end - seg->start);
 #else
 		seg->first_page = PHYS_TO_VM_PAGE(seg->start);
+#endif
+#if VM_NRESERVLEVEL > 0
+		l0_start = seg->start >> VM_LEVEL_0_SHIFT;
+		l0_end = roundup2(seg->end, VM_LEVEL_0_SIZE) >> VM_LEVEL_0_SHIFT;
+		seg->first_superpage = nl0;
+		nl0 += l0_end - l0_start;
+		if (l0_end_prev > l0_start) {
+			seg->first_superpage--;
+			nl0--;
+		}
+		l0_end_prev = l0_end;
 #endif
 #ifdef	VM_FREELIST_LOWMEM
 		if (seg->end <= VM_LOWMEM_BOUNDARY) {
@@ -909,6 +933,24 @@ vm_phys_paddr_to_vm_page(vm_paddr_t pa)
 	}
 	return (NULL);
 }
+
+#if VM_NRESERVLEVEL > 0
+int
+vm_phys_paddr_to_superpage_index(vm_paddr_t pa)
+{
+	struct vm_phys_seg *seg;
+	int segind;
+
+	for (segind = 0; segind < vm_phys_nsegs; segind++) {
+		seg = &vm_phys_segs[segind];
+		if (pa >= seg->start && pa < seg->end)
+			return (seg->first_superpage +
+			    (pa >> VM_LEVEL_0_SHIFT) -
+			    (seg->start >> VM_LEVEL_0_SHIFT));
+	}
+	panic("pa 0x%jx not within vm_phys_segs", (uintmax_t)pa);
+}
+#endif
 
 vm_page_t
 vm_phys_fictitious_to_vm_page(vm_paddr_t pa)
