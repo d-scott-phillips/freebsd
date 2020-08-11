@@ -178,7 +178,7 @@ __FBSDID("$FreeBSD$");
 #endif
 
 #define	pmap_l2_pindex(v)	((v) >> L2_SHIFT)
-#define	pa_to_pvh(pa)		(&pv_table[pmap_l2_pindex(pa)])
+#define	pa_to_pvh(pa)		(&pv_table[vm_phys_paddr_to_superpage_index(pa)])
 
 #define	NPV_LIST_LOCKS	MAXCPU
 
@@ -1024,6 +1024,7 @@ pmap_init_asids(struct asid_set *set, int bits)
 void
 pmap_init(void)
 {
+	struct vm_phys_seg *seg;
 	vm_size_t s;
 	uint64_t mmfr1;
 	int i, pv_npg, vmid_bits;
@@ -1068,7 +1069,10 @@ pmap_init(void)
 	/*
 	 * Calculate the size of the pv head table for superpages.
 	 */
-	pv_npg = howmany(vm_phys_segs[vm_phys_nsegs - 1].end, L2_SIZE);
+	seg = &vm_phys_segs[vm_phys_nsegs - 1];
+	pv_npg = seg->first_superpage +
+	    pmap_l2_pindex(roundup2(seg->end, L2_SIZE)) -
+	    pmap_l2_pindex(seg->start);
 
 	/*
 	 * Allocate memory for the pv head table for superpages.
