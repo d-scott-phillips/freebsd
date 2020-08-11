@@ -233,6 +233,8 @@ TAILQ_HEAD(vm_reserv_queue, vm_reserv);
  */
 static vm_reserv_t vm_reserv_array;
 
+#define PHYS_TO_VM_RESERV(pa) &vm_reserv_array[vm_phys_paddr_to_superpage_index(pa)]
+
 /*
  * The per-domain partially populated reservation queues
  *
@@ -335,7 +337,7 @@ sysctl_vm_reserv_fullpop(SYSCTL_HANDLER_ARGS)
 		paddr = roundup2(seg->start, VM_LEVEL_0_SIZE);
 		while (paddr + VM_LEVEL_0_SIZE > paddr && paddr +
 		    VM_LEVEL_0_SIZE <= seg->end) {
-			rv = &vm_reserv_array[paddr >> VM_LEVEL_0_SHIFT];
+			rv = PHYS_TO_VM_RESERV(paddr);
 			fullpop += rv->popcnt == VM_LEVEL_0_NPAGES;
 			paddr += VM_LEVEL_0_SIZE;
 		}
@@ -497,7 +499,7 @@ static __inline vm_reserv_t
 vm_reserv_from_page(vm_page_t m)
 {
 
-	return (&vm_reserv_array[VM_PAGE_TO_PHYS(m) >> VM_LEVEL_0_SHIFT]);
+	return (PHYS_TO_VM_RESERV(VM_PAGE_TO_PHYS(m)));
 }
 
 /*
@@ -1065,7 +1067,7 @@ vm_reserv_init(void)
 		paddr = roundup2(seg->start, VM_LEVEL_0_SIZE);
 		while (paddr + VM_LEVEL_0_SIZE > paddr && paddr +
 		    VM_LEVEL_0_SIZE <= seg->end) {
-			rv = &vm_reserv_array[paddr >> VM_LEVEL_0_SHIFT];
+			rv = PHYS_TO_VM_RESERV(paddr);
 			rv->pages = PHYS_TO_VM_PAGE(paddr);
 			rv->domain = seg->domain;
 			mtx_init(&rv->lock, "vm reserv", NULL, MTX_DEF);
@@ -1400,20 +1402,20 @@ vm_reserv_size(int level)
 vm_paddr_t
 vm_reserv_startup(vm_offset_t *vaddr, vm_paddr_t end)
 {
-	vm_paddr_t new_end, high_water;
+	vm_paddr_t new_end;
 	size_t size;
-	int i;
+	int count, i;
 
-	high_water = phys_avail[1];
+	count = 0;
 	for (i = 0; i < vm_phys_nsegs; i++) {
-		if (vm_phys_segs[i].end > high_water)
-			high_water = vm_phys_segs[i].end;
+		count += howmany(vm_phys_segs[i].end, VM_LEVEL_0_SIZE) -
+		    vm_phys_segs[i].start / VM_LEVEL_0_SIZE;
 	}
 
 	/* Skip the first chunk.  It is already accounted for. */
 	for (i = 2; phys_avail[i + 1] != 0; i += 2) {
-		if (phys_avail[i + 1] > high_water)
-			high_water = phys_avail[i + 1];
+		count += howmany(phys_avail[i + 1], VM_LEVEL_0_SIZE) -
+		    phys_avail[i] / VM_LEVEL_0_SIZE;
 	}
 
 	/*
@@ -1423,7 +1425,7 @@ vm_reserv_startup(vm_offset_t *vaddr, vm_paddr_t end)
 	 * number of elements in the reservation array can be greater than the
 	 * number of superpages. 
 	 */
-	size = howmany(high_water, VM_LEVEL_0_SIZE) * sizeof(struct vm_reserv);
+	size = count * sizeof(struct vm_reserv);
 
 	/*
 	 * Allocate and map the physical memory for the reservation array.  The
