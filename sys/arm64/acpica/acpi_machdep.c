@@ -47,6 +47,16 @@ __FBSDID("$FreeBSD$");
 #include <dev/acpica/acpivar.h>
 
 extern struct bus_space memmap_bus;
+uint64_t id_aa64mmfr0_parange[] = {
+	  4ULL /* GiB */ << 30,
+	 64ULL /* GiB */ << 30,
+	  1ULL /* TiB */ << 40,
+	  4ULL /* TiB */ << 40,
+	 16ULL /* TiB */ << 40,
+	256ULL /* TiB */ << 40,
+	  4ULL /* PiB */ << 50,
+	0, 0, 0, 0, 0, 0, 0, 0, 0,
+};
 
 int
 acpi_machdep_init(device_t dev)
@@ -240,12 +250,14 @@ acpi_map_addr(struct acpi_generic_address *addr, bus_space_tag_t *tag,
 static void
 parse_pxm_tables(void *dummy)
 {
+	uint64_t mmfr0;
 
 	/* Only parse ACPI tables when booting via ACPI */
 	if (arm64_bus_method != ARM64_BUS_ACPI)
 		return;
 
-	acpi_pxm_init(MAXCPU, (vm_paddr_t)1 << 40);
+	mmfr0 = READ_SPECIALREG(id_aa64mmfr0_el1);
+	acpi_pxm_init(MAXCPU, id_aa64mmfr0_parange[mmfr0 & 0xf]);
 	acpi_pxm_parse_tables();
 	acpi_pxm_set_mem_locality();
 }
