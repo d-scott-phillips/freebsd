@@ -222,6 +222,24 @@
 	__bit;								\
 })
 
+#define	BIT_FFS_AT(_s, p, start) __extension__ ({			\
+	__size_t __i;							\
+	int __bit;							\
+	long __test;							\
+									\
+	__bit = 0;							\
+	__i = __bitset_word(_s, start);					\
+	if (__i < __bitset_words((_s))) {				\
+		__test = (p)->__bits[__i] &				\
+		    (~0UL << ((start) % _BITSET_BITS));			\
+		while (__test == 0 && ++__i < __bitset_words((_s)))	\
+			__test = (p)->__bits[__i];			\
+		if (__i < __bitset_words((_s)))				\
+			__bit = ffsl(__test) + __i * _BITSET_BITS;	\
+	}								\
+	__bit;								\
+})
+
 #define	BIT_FLS(_s, p) __extension__ ({					\
 	__size_t __i;							\
 	int __bit;							\
