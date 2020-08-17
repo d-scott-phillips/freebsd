@@ -129,8 +129,8 @@ _arm_minidump_initvtop(kvm_t *kd)
 
 	sparse_off = off + arm_round_page(vmst->hdr.bitmapsize) +
 	    arm_round_page(vmst->hdr.ptesize);
-	if (_kvm_pt_init(kd, vmst->hdr.bitmapsize, off, sparse_off,
-	    ARM_PAGE_SIZE, sizeof(uint32_t)) == -1) {
+	if (_kvm_pt_init(kd, sizeof(vmst->hdr), vmst->hdr.bitmapsize, off,
+	    sparse_off, ARM_PAGE_SIZE, sizeof(uint32_t)) == -1) {
 		return (-1);
 	}
 	off += arm_round_page(vmst->hdr.bitmapsize);
