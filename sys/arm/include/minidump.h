@@ -33,7 +33,7 @@
 #define	_MACHINE_MINIDUMP_H_
 
 #define	MINIDUMP_MAGIC		"minidump FreeBSD/arm"
-#define	MINIDUMP_VERSION	1
+#define	MINIDUMP_VERSION	2
 
 /*
  * The first page of vmcore is dedicated to the following header.

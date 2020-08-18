@@ -290,14 +290,41 @@ _kvm_map_get(kvm_t *kd, u_long pa, unsigned int page_size)
 }
 
 int
-_kvm_pt_init(kvm_t *kd, size_t map_len, off_t map_off, off_t sparse_off,
-    int page_size, int word_size)
+_kvm_pt_init(kvm_t *kd, off_t dump_avail_off, size_t map_len, off_t map_off,
+    off_t sparse_off, int page_size, int word_size)
 {
 	uint64_t *addr;
 	uint32_t *popcount_bin;
-	int bin_popcounts = 0;
+	int bin_popcounts = 0, i;
 	uint64_t pc_bins, res;
 	ssize_t rd;
+
+	i = 0;
+	do {
+		if (i * sizeof(kpaddr_t) >= kd->dump_avail_size) {
+			kd->dump_avail_size = MIN(8 * sizeof(kpaddr_t),
+			    2 * kd->dump_avail_size);
+			kd->dump_avail = realloc(kd->dump_avail,
+			    kd->dump_avail_size);
+			if (kd->dump_avail == NULL) {
+				_kvm_err(kd, kd->program, "cannot allocate %zu "
+				    "bytes for dump_avail", kd->dump_avail_size);
+			return (-1);
+			}
+		}
+		rd = pread(kd->pmfd, &kd->dump_avail[i], 2 * sizeof(kpaddr_t),
+		    dump_avail_off);
+		if (rd < 0 || rd != 2 * sizeof(kpaddr_t)) {
+			_kvm_err(kd, kd->program, "cannot read %zu bytes for "
+			    "dump_avail", 2 * sizeof(kpaddr_t));
+			return (-1);
+		}
+		i += 2;
+		dump_avail_off += 2 * sizeof(kpaddr_t);
+	} while (kd->dump_avail[i - 1] != 0 && i < 128);
+
+	if (i > 128)
+		kd->dump_avail[0] = kd->dump_avail[1] = 0;
 
 	/*
 	 * Map the bitmap specified by the arguments.
@@ -394,6 +421,45 @@ _kvm_pmap_init(kvm_t *kd, uint32_t pmap_size, off_t pmap_off)
 	return (0);
 }
 
+uint64_t
+_kvm_pa_bit_id(kvm_t *kd, uint64_t pa, unsigned int page_size)
+{
+	uint64_t adj;
+	int i;
+
+	adj = 0;
+	for (i = 0; kd->dump_avail[i + 1] != 0; i += 2) {
+		if (pa >= kd->dump_avail[i + 1]) {
+			adj += roundup2(kd->dump_avail[i + 1], page_size) -
+			    kd->dump_avail[i] / page_size;
+		} else {
+			return (pa / page_size -
+			    kd->dump_avail[i] / page_size + adj);
+		}
+	}
+	return (adj + pa / page_size -
+	    roundup2(kd->dump_avail[i - 1], page_size));
+}
+
+uint64_t
+_kvm_bit_id_pa(kvm_t *kd, uint64_t bit_id, unsigned int page_size)
+{
+	uint64_t sz;
+	int i;
+
+	for (i = 0; kd->dump_avail[i + 1] != 0; i += 2) {
+		sz = roundup2(kd->dump_avail[i + 1], page_size) -
+		    kd->dump_avail[i] / page_size;
+		if (bit_id < sz) {
+			return (rounddown2(kd->dump_avail[i], page_size) +
+			    bit_id * page_size);
+		}
+		bit_id -= sz;
+	}
+	return (bit_id * page_size +
+	    roundup2(kd->dump_avail[i - 1], page_size));
+}
+
 /*
  * Find the offset for the given physical page address; returns -1 otherwise.
  *
@@ -412,7 +478,7 @@ off_t
 _kvm_pt_find(kvm_t *kd, uint64_t pa, unsigned int page_size)
 {
 	uint64_t *bitmap = kd->pt_map;
-	uint64_t pte_bit_id = pa / page_size;
+	uint64_t pte_bit_id = _kvm_pa_bit_id(kd, pa, page_size);
 	uint64_t pte_u64 = pte_bit_id / BITS_IN(*bitmap);
 	uint64_t popcount_id = pte_bit_id / POPCOUNT_BITS;
 	uint64_t pte_mask = 1ULL << (pte_bit_id % BITS_IN(*bitmap));
@@ -714,9 +780,8 @@ _kvm_bitmap_init(struct kvm_bitmap *bm, u_long bitmapsize, u_long *idx)
 }
 
 void
-_kvm_bitmap_set(struct kvm_bitmap *bm, u_long pa, unsigned int page_size)
+_kvm_bitmap_set(struct kvm_bitmap *bm, u_long bm_index)
 {
-	u_long bm_index = pa / page_size;
 	uint8_t *byte = &bm->map[bm_index / 8];
 
 	*byte |= (1UL << (bm_index % 8));
