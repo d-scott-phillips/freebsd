@@ -212,9 +212,8 @@
  * 1-based bit indices.
  */
 #define	BIT_FFS_AT(_s, p, start) __extension__ ({			\
-	__size_t __i;							\
+	__size_t __i, __bit;						\
 	long __mask;							\
-	int __bit;							\
 									\
 	__mask = ~0UL << ((start) % _BITSET_BITS);			\
 	__bit = 0;							\
@@ -234,8 +233,7 @@
 #define	BIT_FFS(_s, p) BIT_FFS_AT((_s), (p), 0)
 
 #define	BIT_FLS(_s, p) __extension__ ({					\
-	__size_t __i;							\
-	int __bit;							\
+	__size_t __i, __bit;						\
 									\
 	__bit = 0;							\
 	for (__i = __bitset_words((_s)); __i > 0; __i--) {		\
