@@ -122,8 +122,8 @@ _riscv_minidump_initvtop(kvm_t *kd)
 	/* build physical address lookup table for sparse pages */
 	sparse_off = off + riscv_round_page(vmst->hdr.bitmapsize) +
 	    riscv_round_page(vmst->hdr.pmapsize);
-	if (_kvm_pt_init(kd, vmst->hdr.bitmapsize, off, sparse_off,
-	    RISCV_PAGE_SIZE, sizeof(uint64_t)) == -1) {
+	if (_kvm_pt_init(kd, sizeof(vmst->hdr), vmst->hdr.bitmapsize, off,
+	    sparse_off, RISCV_PAGE_SIZE, sizeof(uint64_t)) == -1) {
 		return (-1);
 	}
 	off += riscv_round_page(vmst->hdr.bitmapsize);
@@ -258,7 +258,7 @@ _riscv_minidump_walk_pages(kvm_t *kd, kvm_walk_pages_cb_t *cb, void *arg)
 	}
 
 	while (_kvm_bitmap_next(&bm, &bmindex)) {
-		pa = bmindex * RISCV_PAGE_SIZE;
+		pa = _kvm_bit_id_pa(kd, bmindex, RISCV_PAGE_SIZE);
 		dva = vm->hdr.dmapbase + pa;
 		if (vm->hdr.dmapend < (dva + RISCV_PAGE_SIZE))
 			break;

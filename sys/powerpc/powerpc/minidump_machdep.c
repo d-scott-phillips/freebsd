@@ -245,6 +245,7 @@ dump_pmap(struct dumperinfo *di)
 int
 minidumpsys(struct dumperinfo *di)
 {
+	kpaddr_t *dump_avail_out;
 	vm_paddr_t pa;
 	int error, i, retry_count;
 	uint32_t pmapsize;
@@ -311,6 +312,12 @@ retry:
 	/* Dump minidump header */
 	bzero(pgbuf, sizeof(pgbuf));
 	memcpy(pgbuf, &mdhdr, sizeof(mdhdr));
+	dump_avail_out = (kpaddr_t *)(pgbuf + sizeof(mdhdr));
+	for (i = 0; dump_avail[i + 1] != 0; i += 2) {
+		dump_avail_out[i] = dump_avail[i];
+		dump_avail_out[i + 1] = dump_avail[i + 1];
+	}
+	dump_avail_out[i] = dump_avail_out[i + 1] = 0;
 	error = blk_write(di, pgbuf, 0, PAGE_SIZE);
 	if (error)
 		goto fail;

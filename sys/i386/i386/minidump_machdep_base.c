@@ -176,6 +176,7 @@ int
 minidumpsys(struct dumperinfo *di)
 {
 	uint64_t dumpsize;
+	kpaddr_t *dump_avail_out;
 	uint32_t ptesize;
 	vm_offset_t va;
 	int error;
@@ -260,6 +261,12 @@ minidumpsys(struct dumperinfo *di)
 	/* Dump my header */
 	bzero(&fakept, sizeof(fakept));
 	bcopy(&mdhdr, &fakept, sizeof(mdhdr));
+	dump_avail_out = (kpaddr_t *)((char *)fakept + sizeof(mdhdr));
+	for (j = 0; dump_avail[j + 1] != 0; j++) {
+		dump_avail_out[j] = dump_avail[j];
+		dump_avail_out[j + 1] = dump_avail[j + 1];
+	}
+	dump_avail_out[j] = dump_avail_out[j + 1] = 0;
 	error = blk_write(di, (char *)&fakept, 0, PAGE_SIZE);
 	if (error)
 		goto fail;
