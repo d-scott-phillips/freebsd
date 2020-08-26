@@ -37,6 +37,8 @@
 .Op Fl o Ar bootorder
 .Op Fl verbose
 .Op Fl c -k Ar kernel -l Ar loader [-L Ar label] [--dry-run] [-b Bootvar]
+.Op Fl F
+.Op Fl f
 .Sh "DESCRIPTION"
 .Nm
 manipulates how UEFI Boot Managers boot the system.
@@ -66,6 +68,9 @@ The following options are available:
 .Bl -tag -width 28m
 .It Fl c Fl -create
 Create a new Boot Variable
+.It Fl f -fw-ui , Fl F -no-fw-ui
+Set or clear the request to the system firmware to stop in its user
+interface on the next boot.
 .It Fl l -loader Ar loader
 The path to and name of the loader.
 .It Fl k -kernel Ar kernel
