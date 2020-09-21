@@ -213,6 +213,7 @@ minidumpsys(struct dumperinfo *di)
 	/* Calculate dump size. */
 	dumpsize = ptesize;
 	dumpsize += round_page(msgbufp->msg_size);
+	dumpsize += round_page(sizeof(dump_avail));
 	dumpsize += round_page(BITSET_SIZE(vm_page_dump_pages));
 	VM_PAGE_DUMP_FOREACH(pa) {
 		bits = vm_page_dump[i];
@@ -240,6 +241,7 @@ minidumpsys(struct dumperinfo *di)
 #if defined(PAE) || defined(PAE_TABLES)
 	mdhdr.paemode = 1;
 #endif
+	mdhdr.dumpavailsize = round_page(sizeof(dump_avail));
 
 	dump_init_header(di, &kdh, KERNELDUMPMAGIC, KERNELDUMP_I386_VERSION,
 	    dumpsize);
@@ -260,6 +262,15 @@ minidumpsys(struct dumperinfo *di)
 
 	/* Dump msgbuf up front */
 	error = blk_write(di, (char *)msgbufp->msg_ptr, 0, round_page(msgbufp->msg_size));
+	if (error)
+		goto fail;
+
+	/* Dump dump_avail */
+	_Static_assert(sizeof(dump_avail) <= sizeof(fakept),
+	    "Large dump_avail not handled");
+	bzero(fakept, sizeof(fakept));
+	memcpy(fakept, dump_avail, sizeof(dump_avail));
+	error = blk_write(di, (char *)&fakept, 0, PAGE_SIZE);
 	if (error)
 		goto fail;
 
